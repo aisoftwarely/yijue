@@ -1,0 +1,6 @@
+build/
+DerivedData/
+*.xcodeproj/
+Support/Info.plist
+Yijue/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+.DS_Store

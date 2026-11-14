@@ -1,0 +1,86 @@
+# 一觉（Yijue）
+
+自用的 iPhone 睡眠记录 App：睡眠专注打开/关闭时自动记录入睡与起床时间，没配置自动化时用手机静止状态兜底推测；首页看最近一晚，统计页看每周/每月时长和作息趋势；另有睡前提醒和起床闹钟。数据只存在手机本地，不上架 App Store。
+
+## 自动记录怎么来的
+
+免费 Apple ID 签名用不了 HealthKit，所以不读系统健康数据，分两层：
+
+1. **快捷指令自动化（主）**：iOS 的「睡眠专注」开/关可以触发个人自动化，调用本 App 的「记录入睡 / 记录起床」动作；App 在后台被唤起，只写一个时间戳。
+2. **静止推测（兜底）**：App 进前台时读取手机最近 7 天的运动历史，夜里长时间静止就推成睡眠。手机放得远、戴表睡觉时可能不准，可以确认或修正。
+
+没配置自动化也能用：首页有「记录入睡 / 记录起床」，右上角可以补记任意一晚。
+
+## 为什么在云端编译
+
+- iPhone 是 iOS 27，编译需要 Xcode 27；Xcode 27 只支持 Apple 芯片 Mac。
+- 本地机器是 Intel 黑苹果，无法运行 Xcode 27。
+- 所以：GitHub Actions 的 `xcode-27` 运行器输出未签名 IPA，再用 Sideloadly 用免费 Apple ID 签名安装。
+
+## 构建
+
+推送到 `main` 或手动触发 **Actions → Build IPA → Run workflow**。
+
+成功后 Releases 里会有一条 `build-N`，附件是 `Yijue.ipa`：
+
+```bash
+curl -L -o Yijue.ipa \
+  https://github.com/aisoftwarely/yijue/releases/download/build-<N>/Yijue.ipa
+```
+
+## 安装
+
+1. 从 https://sideloadly.io 下载 macOS 版，拖进「应用程序」，右键 → 打开。
+2. 数据线连接 iPhone，手机上点「信任」。
+3. 把 `Yijue.ipa` 拖进 Sideloadly，输入免费 Apple ID 和双重认证码，点 **Start**。
+4. 手机：设置 → 通用 → VPN 与设备管理 → 信任证书；设置 → 隐私与安全性 → 开发者模式 → 打开并重启。
+5. 打开「一觉」，允许通知、运动与健身、闹钟。
+6. **装好后先打开一次 App，再重启一次手机**，让系统索引「快捷指令」里的动作。
+
+## 配置自动记录（一次性，约 3 分钟）
+
+1. 打开「快捷指令」→ 底部「自动化」→ 右上角「+」。
+2. 触发器选「睡眠专注」→「已开启」→ 选「立即运行」。
+3. 添加操作 → 搜索「一觉」→ 选「记录入睡」→ 完成。
+4. 再建一个：睡眠专注「已关闭」→「记录起床」。
+5. 在 App 的「自动记录」页点「我已完成设置」。
+
+搜不到「一觉」的动作时：先打开一次 App 再重启手机；仍不行就删除重装或切换一次系统语言。也可以用「打开 URL」兜底：
+
+```
+yijue://event?kind=bedtime
+yijue://event?kind=wake
+```
+
+## 自动续签
+
+与「一瓢」相同：
+
+1. Finder 选中 iPhone → 勾选「通过 Wi-Fi 同步」。
+2. Sideloadly 底部 Start 左边的圆形箭头是 AutoRefresh 开关，点成高亮。
+3. 首次开启询问 daemon 自启时选 **Yes**。
+4. 之后 Mac 每周内醒着、和手机连过同一 Wi-Fi 就会自动续签。
+5. 免费证书 7 天有效；过期重装即可，记录不会丢（更改 bundle id 或删除 App 才会丢）。
+
+## 已知限制
+
+- 免费 Apple ID 最多同时签 3 个 App，证书 7 天。
+- 不读 HealthKit（免费签名没有这个能力），所以没有自动的睡眠分期。
+- 起床闹钟用 iOS 26 的 AlarmKit；如果系统不允许，会自动回退成普通通知（静音/专注下可能不响）。
+- 静止推测是启发式：手机整夜放床头效果最好，Apple 只保留最近 7 天历史。
+- 快捷指令自动化在重装 App 后可能需要重新选择一次动作。
+- iOS 单个 App 最多保留 64 条待发通知；本 App 最多 9 条，不会触发。
+
+## 目录
+
+```
+project.yml                        XcodeGen 工程配置
+Yijue/App/                         入口、URL scheme
+Yijue/Models/                      数据模型、存储、统计
+Yijue/Services/                    通知、闹钟、静止推测
+Yijue/Intents/                     快捷指令动作
+Yijue/Views/                       首页 / 统计 / 设置 / 编辑器
+Yijue/Resources/                   图标、主题色
+tools/make_icon.swift              生成 1024 App 图标
+.github/workflows/build-ipa.yml    云端构建
+```
