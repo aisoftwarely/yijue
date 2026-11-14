@@ -180,7 +180,7 @@ final class AlarmKitWakeAlarmScheduler {
 
     func reschedule(settings: SleepSettings) async -> WakeAlarmResult {
         do {
-            try? await AlarmManager.shared.cancel(id: alarmIdentifier)
+            try? AlarmManager.shared.cancel(id: alarmIdentifier)
 
             guard settings.wakeAlarmEnabled else {
                 return WakeAlarmResult(mode: .off, detail: "起床闹钟未开启", scheduledCount: 0)
@@ -205,7 +205,7 @@ final class AlarmKitWakeAlarmScheduler {
                 )
             )
 
-            let configuration = AlarmManager.AlarmConfiguration(
+            let configuration = AlarmManager.AlarmConfiguration<YijueAlarmMetadata>(
                 schedule: schedule,
                 attributes: attributes
             )
@@ -228,9 +228,9 @@ final class AlarmKitWakeAlarmScheduler {
                 return WakeAlarmResult(mode: .off, detail: "系统闹钟权限未开启", scheduledCount: 0)
             }
 
-            try? await AlarmManager.shared.cancel(id: testIdentifier)
+            try? AlarmManager.shared.cancel(id: testIdentifier)
 
-            let configuration = AlarmManager.AlarmConfiguration(
+            let configuration = AlarmManager.AlarmConfiguration<YijueAlarmMetadata>(
                 schedule: .fixed(Date().addingTimeInterval(120)),
                 attributes: Self.attributes()
             )
@@ -263,8 +263,9 @@ final class AlarmKitWakeAlarmScheduler {
         )
     }
 
-    private static func weekdays(_ calendarWeekdays: [Int]) -> [Alarm.Schedule.Weekday] {
-        var result: [Alarm.Schedule.Weekday] = []
+    /// Calendar 的 weekday：1 = 周日 … 7 = 周六；AlarmKit 用 Locale.Weekday。
+    private static func weekdays(_ calendarWeekdays: [Int]) -> [Locale.Weekday] {
+        var result: [Locale.Weekday] = []
         for day in calendarWeekdays.sorted() {
             switch day {
             case 1: result.append(.sunday)
