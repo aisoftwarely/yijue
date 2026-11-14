@@ -36,30 +36,46 @@ final class WakeAlarmScheduler {
     private let fallback = NotificationWakeAlarmScheduler()
 
     func reschedule(settings: SleepSettings) async -> WakeAlarmResult {
+        var alarmKitFailure = ""
+
         #if canImport(AlarmKit)
-        if #available(iOS 26.0, *), settings.wakeAlarmEnabled {
+        if #available(iOS 26.0, *) {
+            // 即使关闭闹钟也要进一次：负责取消已有的系统闹钟
             let alarmResult = await AlarmKitWakeAlarmScheduler.shared.reschedule(settings: settings)
             if alarmResult.mode == .alarmKit {
                 _ = await fallback.reschedule(settings: settings, enabled: false)
                 return alarmResult
             }
-            if settings.useNotificationFallback {
-                let result = await fallback.reschedule(settings: settings, enabled: true)
-                return WakeAlarmResult(
-                    mode: result.scheduledCount > 0 ? .notification : .off,
-                    detail: "系统闹钟不可用（\(alarmResult.detail)），已改用普通通知；静音或专注模式下可能不响。",
-                    scheduledCount: result.scheduledCount
-                )
+            if !settings.wakeAlarmEnabled {
+                _ = await fallback.reschedule(settings: settings, enabled: false)
+                return WakeAlarmResult(mode: .off, detail: "起床闹钟未开启", scheduledCount: 0)
             }
-            return alarmResult
+            alarmKitFailure = alarmResult.detail
         }
         #endif
 
-        let result = await fallback.reschedule(settings: settings, enabled: settings.wakeAlarmEnabled)
-        if settings.wakeAlarmEnabled && result.scheduledCount > 0 {
-            return WakeAlarmResult(mode: .notification, detail: WakeAlarmMode.notification.detail, scheduledCount: result.scheduledCount)
+        guard settings.wakeAlarmEnabled else {
+            _ = await fallback.reschedule(settings: settings, enabled: false)
+            return WakeAlarmResult(mode: .off, detail: "起床闹钟未开启", scheduledCount: 0)
         }
-        return WakeAlarmResult(mode: .off, detail: "起床闹钟未开启", scheduledCount: 0)
+
+        guard settings.useNotificationFallback else {
+            return WakeAlarmResult(
+                mode: .off,
+                detail: alarmKitFailure.isEmpty ? "未排程" : alarmKitFailure,
+                scheduledCount: 0
+            )
+        }
+
+        let result = await fallback.reschedule(settings: settings, enabled: true)
+        let detail = alarmKitFailure.isEmpty
+            ? WakeAlarmMode.notification.detail
+            : "系统闹钟不可用（\(alarmKitFailure)），已改用普通通知；静音或专注模式下可能不响。"
+        return WakeAlarmResult(
+            mode: result.scheduledCount > 0 ? .notification : .off,
+            detail: detail,
+            scheduledCount: result.scheduledCount
+        )
     }
 
     /// 2 分钟后的测试。真机验证锁屏/静音/专注下的表现。
@@ -164,16 +180,15 @@ final class AlarmKitWakeAlarmScheduler {
 
     func reschedule(settings: SleepSettings) async -> WakeAlarmResult {
         do {
-            let state = try await AlarmManager.shared.requestAuthorization()
-            guard case .authorized = state else {
-                try? await AlarmManager.shared.cancel(id: alarmIdentifier)
-                return WakeAlarmResult(mode: .off, detail: "系统闹钟权限未开启", scheduledCount: 0)
-            }
-
             try? await AlarmManager.shared.cancel(id: alarmIdentifier)
 
             guard settings.wakeAlarmEnabled else {
                 return WakeAlarmResult(mode: .off, detail: "起床闹钟未开启", scheduledCount: 0)
+            }
+
+            let state = try await AlarmManager.shared.requestAuthorization()
+            guard case .authorized = state else {
+                return WakeAlarmResult(mode: .off, detail: "系统闹钟权限未开启", scheduledCount: 0)
             }
 
             let attributes = Self.attributes()

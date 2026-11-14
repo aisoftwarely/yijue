@@ -67,7 +67,7 @@ struct HomeView: View {
                     if record.isComplete, let bed = record.bedTime, let wake = record.wakeTime, let duration = record.duration {
                         Text(SleepCalendar.durationText(duration))
                             .font(.system(size: 40, weight: .semibold, design: .rounded))
-                            .foregroundStyle(store.meetsGoal(record) ? Color.primary : Color.primary)
+                            .foregroundStyle(Color.primary)
 
                         HStack(spacing: 8) {
                             Label(SleepCalendar.clockText(for: bed), systemImage: "moon.fill")
