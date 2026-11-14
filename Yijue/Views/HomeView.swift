@@ -20,7 +20,7 @@ struct HomeView: View {
                 .padding(.vertical, 12)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("一觉")
+            .navigationTitle("睡个好觉")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

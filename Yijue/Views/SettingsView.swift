@@ -97,7 +97,7 @@ struct SettingsView: View {
             Text("睡前提醒")
         } footer: {
             if store.notificationDenied {
-                Text("通知权限未开启，提醒不会送达。请到「设置 > 通知 > 一觉」中允许。")
+                Text("通知权限未开启，提醒不会送达。请到「设置 > 通知 > 睡个好觉」中允许。")
             } else if store.settings.bedtimeReminderEnabled {
                 Text("每天 \(reminderTimeText) 提醒一次。建议放在睡眠专注开始之前，避免被专注模式静音。")
             }
@@ -119,7 +119,7 @@ struct SettingsView: View {
             Text("睡眠小结")
         } footer: {
             if store.notificationDenied {
-                Text("通知权限未开启，小结不会送达。请到「设置 > 通知 > 一觉」中允许。")
+                Text("通知权限未开启，小结不会送达。请到「设置 > 通知 > 睡个好觉」中允许。")
             } else {
                 Text("起床 30 分钟后推送「昨晚睡了多久」；每周一附最近 7 晚平均时长和达标天数，每月 1 号附上月总结。需要通知权限。")
             }
@@ -185,7 +185,7 @@ struct SettingsView: View {
         } header: {
             Text("自动记录")
         } footer: {
-            Text("睡眠专注打开、关闭时，快捷指令会自动调用「一觉」记录时间。")
+            Text("睡眠专注打开、关闭时，快捷指令会自动调用「睡个好觉」记录时间。")
         }
     }
 
@@ -238,7 +238,7 @@ struct SettingsView: View {
     private var aboutSection: some View {
         Section("关于") {
             LabeledContent("版本", value: versionText)
-            Text("一觉 · 自用版，不上架 App Store。数据只存在本机；免费证书 7 天有效，Mac 与手机同 Wi-Fi 时会自动续签，到期重装记录也不会丢。")
+            Text("睡个好觉 · 自用版，不上架 App Store。数据只存在本机；免费证书 7 天有效，Mac 与手机同 Wi-Fi 时会自动续签，到期重装记录也不会丢。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

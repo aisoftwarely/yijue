@@ -8,8 +8,8 @@ enum StatsPeriod: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .week: return "最近 7 晚"
-        case .month: return "本月"
+        case .week: return "按周"
+        case .month: return "按月"
         }
     }
 }

@@ -18,7 +18,7 @@ struct AutomationSetupView: View {
                 Section {
                     stepRow("1", "打开「快捷指令」，底部点「自动化」，右上角点「+」")
                     stepRow("2", "触发器选「睡眠专注」→「已开启」→ 选「立即运行」")
-                    stepRow("3", "添加操作，搜索「一觉」，选「记录入睡」，点完成")
+                    stepRow("3", "添加操作，搜索「睡个好觉」，选「记录入睡」，点完成")
                     stepRow("4", "再建一个：睡眠专注「已关闭」→「记录起床」")
                     stepRow("5", "回到这里，点下面的「我已完成设置」")
                 } header: {
@@ -41,7 +41,7 @@ struct AutomationSetupView: View {
                     }
                 }
 
-                Section("搜不到「一觉」的动作？") {
+                Section("搜不到「睡个好觉」的动作？") {
                     Text("1. 先完整打开一次本 App，再重启手机；\n2. 还不行就删除 App 重装，或切换一次系统语言；\n3. 也可以先用「打开 URL」兜底：yijue://event?kind=bedtime 和 yijue://event?kind=wake。")
                         .font(.footnote)
                 }

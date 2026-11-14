@@ -4,39 +4,121 @@ import SwiftUI
 struct StatsView: View {
     @EnvironmentObject private var store: SleepStore
     @State private var period: StatsPeriod = .week
+    /// 正在查看的时间段：周视图按 7 天、月视图按自然月。
+    @State private var anchor: Date = Date()
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    Picker("范围", selection: $period) {
-                        ForEach(StatsPeriod.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    summaryGrid
-
-                    if hasData {
-                        durationCard
-                        bedtimeCard
-                        wakeCard
-                    } else {
-                        emptyCard
-                    }
+                    periodPicker
+                    periodHeader
+                    content
                 }
                 .padding(16)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("统计")
+            .onChange(of: period) { _, _ in
+                anchor = Date()
+            }
+        }
+    }
+
+    private var periodPicker: some View {
+        Picker("范围", selection: $period) {
+            ForEach(StatsPeriod.allCases) { item in
+                Text(item.title).tag(item)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if hasData {
+            narrativeCard
+            summaryGrid
+
+            if period == .month {
+                calendarCard
+            }
+
+            durationCard
+            bedtimeCard
+            wakeCard
+        } else {
+            emptyCard
+        }
+    }
+
+    // MARK: - 时间段切换
+
+    private var periodHeader: some View {
+        HStack {
+            Button {
+                shiftPeriod(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(period == .week ? "上一周" : "上个月")
+
+            Spacer()
+
+            Text(periodTitle)
+                .font(.headline)
+
+            Spacer()
+
+            Button {
+                shiftPeriod(1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isCurrentPeriod)
+            .accessibilityLabel(period == .week ? "下一周" : "下个月")
+        }
+    }
+
+    private var periodTitle: String {
+        if period == .month {
+            let components = Calendar.current.dateComponents([.year, .month], from: anchor)
+            return "\(components.year ?? 0) 年 \(components.month ?? 0) 月"
+        }
+        guard let first = points.first?.day, let last = points.last?.day else {
+            return "最近 7 晚"
+        }
+        return "\(SleepCalendar.shortDayFormatter.string(from: first)) – \(SleepCalendar.shortDayFormatter.string(from: last))"
+    }
+
+    private var isCurrentPeriod: Bool {
+        let calendar = Calendar.current
+        switch period {
+        case .week:
+            return anchor >= calendar.startOfDay(for: Date())
+        case .month:
+            return calendar.isDate(anchor, equalTo: Date(), toGranularity: .month)
+        }
+    }
+
+    private func shiftPeriod(_ direction: Int) {
+        let calendar = Calendar.current
+        switch period {
+        case .week:
+            anchor = calendar.date(byAdding: .day, value: 7 * direction, to: anchor) ?? anchor
+        case .month:
+            anchor = calendar.date(byAdding: .month, value: direction, to: anchor) ?? anchor
         }
     }
 
     // MARK: - 数据
 
     private var points: [NightPoint] {
-        SleepStatistics.points(records: store.records, period: period)
+        SleepStatistics.points(records: store.records, period: period, now: anchor)
     }
 
     private var periodRecords: [SleepRecord] {
@@ -125,6 +207,154 @@ struct StatsView: View {
             Color(.secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
+    }
+
+    // MARK: - 文字小结
+
+    private var narrativeText: String {
+        guard let average = SleepStatistics.averageDuration(periodRecords) else {
+            return "这个时段还没有完整记录。"
+        }
+
+        var parts: [String] = ["平均每晚 \(SleepCalendar.durationText(average))"]
+
+        if let previous = previousAverage {
+            let delta = average - previous
+            if abs(delta) < 5 * 60 {
+                parts.append("和上一期差不多")
+            } else if delta > 0 {
+                parts.append("比上一期多睡 \(SleepCalendar.durationText(delta))")
+            } else {
+                parts.append("比上一期少睡 \(SleepCalendar.durationText(-delta))")
+            }
+        }
+
+        let met = SleepStatistics.metGoalCount(periodRecords, goalMinutes: store.settings.goalMinutes)
+        if !completeRecords.isEmpty {
+            parts.append("达标 \(met)/\(completeRecords.count) 晚")
+        }
+
+        return parts.joined(separator: "，") + "。"
+    }
+
+    private var previousAverage: TimeInterval? {
+        let calendar = Calendar.current
+        let component: Calendar.Component = period == .week ? .day : .month
+        let step = period == .week ? -7 : -1
+        guard let previousAnchor = calendar.date(byAdding: component, value: step, to: anchor) else {
+            return nil
+        }
+        let records = SleepStatistics
+            .points(records: store.records, period: period, now: previousAnchor)
+            .compactMap(\.record)
+        return SleepStatistics.averageDuration(records)
+    }
+
+    private var narrativeCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("小结")
+                    .font(.subheadline.weight(.semibold))
+                Text(narrativeText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - 月历热力图
+
+    private var calendarCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("每日睡眠")
+                    .font(.subheadline.weight(.semibold))
+
+                LazyVGrid(columns: heatColumns, spacing: 4) {
+                    ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { symbol in
+                        Text(symbol)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(0..<leadingBlankCount, id: \.self) { _ in
+                        Color.clear.frame(height: 42)
+                    }
+                    ForEach(points) { point in
+                        heatCell(point)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Text("少")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    ForEach(0..<4, id: \.self) { level in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(heatColor(level: level))
+                            .frame(width: 18, height: 8)
+                    }
+                    Text("多")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("深色 = 达到目标")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private var heatColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    }
+
+    /// 月份第一天之前要空几格；中文习惯周一开头。
+    private var leadingBlankCount: Int {
+        guard let first = points.first?.day else { return 0 }
+        let weekday = Calendar.current.component(.weekday, from: first)
+        return (weekday + 5) % 7
+    }
+
+    private func heatLevel(for point: NightPoint) -> Int? {
+        guard let duration = point.duration else { return nil }
+        let ratio = duration / max(60, store.goalInterval)
+        if ratio >= 1 { return 3 }
+        if ratio >= 0.85 { return 2 }
+        if ratio >= 0.6 { return 1 }
+        return 0
+    }
+
+    private func heatColor(level: Int) -> Color {
+        switch level {
+        case 0: return Color.accentColor.opacity(0.18)
+        case 1: return Color.accentColor.opacity(0.4)
+        case 2: return Color.accentColor.opacity(0.65)
+        default: return Color.accentColor
+        }
+    }
+
+    private func heatCell(_ point: NightPoint) -> some View {
+        let day = Calendar.current.component(.day, from: point.day)
+        let level = heatLevel(for: point)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(level.map { heatColor(level: $0) } ?? Color(.systemFill))
+            Text("\(day)")
+                .font(.caption2)
+                .foregroundStyle(level == 3 ? Color.white : Color.primary)
+        }
+        .frame(height: 42)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(day) 日")
+        .accessibilityValue(heatAccessibilityText(for: point))
+    }
+
+    private func heatAccessibilityText(for point: NightPoint) -> String {
+        guard let duration = point.duration else { return "没有记录" }
+        return "睡了 \(SleepCalendar.durationText(duration))"
     }
 
     // MARK: - 图表

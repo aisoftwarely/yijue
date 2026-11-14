@@ -21,7 +21,7 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDevelopmentRegion: "$(DEVELOPMENT_LANGUAGE)"
-        CFBundleDisplayName: 一觉
+        CFBundleDisplayName: 睡个好觉
         CFBundleExecutable: "$(EXECUTABLE_NAME)"
         CFBundleIdentifier: "$(PRODUCT_BUNDLE_IDENTIFIER)"
         CFBundleInfoDictionaryVersion: "6.0"
