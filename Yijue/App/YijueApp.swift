@@ -15,14 +15,14 @@ struct YijueApp: App {
                 }
                 .task {
                     await store.refreshSchedules()
-                    await store.runMotionDetection(force: false)
+                    await store.runMotionDetection(force: false, includeOpenLastNight: true)
                 }
-                .onChange(of: scenePhase) { _, phase in
-                    guard phase == .active else { return }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
                     store.refresh()
                     Task {
                         await store.refreshSchedules()
-                        await store.runMotionDetection(force: false)
+                        await store.runMotionDetection(force: false, includeOpenLastNight: true)
                     }
                 }
         }

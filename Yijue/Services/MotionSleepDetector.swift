@@ -61,11 +61,13 @@ final class MotionSleepDetector {
     }
 
     /// 查询最近 7 天并补写推测记录。返回写入的夜数。
+    /// - Parameter includeOpenLastNight: 允许处理窗口尚未结束的「昨晚」（起床时对账用）。
     @discardableResult
     func detectRecent(
         repository: SleepRepository,
         settings: SleepSettings,
         force: Bool,
+        includeOpenLastNight: Bool = false,
         now: Date = Date()
     ) async -> Int {
         guard settings.motionInferenceEnabled, isAvailable else { return 0 }
@@ -73,7 +75,7 @@ final class MotionSleepDetector {
         let snapshot = repository.snapshot()
         if !force,
            let last = snapshot.motion.lastQueryAt,
-           now.timeIntervalSince(last) < 6 * 3600 {
+           now.timeIntervalSince(last) < 30 * 60 {
             return 0
         }
 
@@ -96,13 +98,24 @@ final class MotionSleepDetector {
                     startMinutes: settings.nightWindowStartMinutes,
                     endMinutes: settings.nightWindowEndMinutes,
                     calendar: calendar
-                ),
-                window.end <= now
+                )
             else { continue }
+
+            // 只处理已结束的夜；起床对账时允许把「昨晚」截到当前时刻。
+            let isOpen = window.end > now
+            let useOpenWindow = includeOpenLastNight
+                && offset == 0
+                && isOpen
+                && now.timeIntervalSince(window.start) >= 5 * 3600
+            guard !isOpen || useOpenWindow else { continue }
+
+            let effectiveEnd = min(window.end, now)
+            let activeWindow = DateInterval(start: window.start, end: effectiveEnd)
+            guard activeWindow.duration > 0 else { continue }
 
             let windowSamples = samples.filter {
                 $0.date >= window.start.addingTimeInterval(-3600)
-                    && $0.date <= window.end.addingTimeInterval(60)
+                    && $0.date <= effectiveEnd.addingTimeInterval(60)
             }
             guard !windowSamples.isEmpty else { continue }
 
@@ -113,7 +126,7 @@ final class MotionSleepDetector {
 
             let candidate = Self.bestCandidate(
                 samples: windowSamples,
-                window: window,
+                window: activeWindow,
                 minDuration: TimeInterval(settings.minInferredMinutes * 60)
             )
 
@@ -129,7 +142,8 @@ final class MotionSleepDetector {
                 Self.snapshot(candidate),
                 forKey: key,
                 now: now,
-                allowUpdate: allowUpdate
+                allowUpdate: allowUpdate,
+                allowCorrection: !isOpen
             ) {
                 written += 1
             }

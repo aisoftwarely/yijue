@@ -9,6 +9,8 @@ final class SleepStore: ObservableObject {
     @Published private(set) var records: [SleepRecord] = []
     @Published private(set) var events: [SleepEvent] = []
     @Published private(set) var motionState: MotionState = MotionState()
+    /// 睡眠专注时间和手机静止时段冲突的夜，key = nightKey。
+    @Published private(set) var reconcileSuggestions: [String: SleepReconcileSuggestion] = [:]
 
     @Published var settings: SleepSettings = SleepSettings() {
         didSet {
@@ -91,6 +93,11 @@ final class SleepStore: ObservableObject {
     func recordEvent(kind: SleepEventKind, source: SleepSource, at date: Date = Date()) -> Bool {
         let changed = SleepRepository.shared.recordEvent(kind: kind, at: date, source: source)
         refresh()
+        if kind == .wake {
+            Task {
+                await MorningSummaryScheduler.shared.reschedule(settings: settings, records: records)
+            }
+        }
         return changed
     }
 
@@ -130,18 +137,60 @@ final class SleepStore: ObservableObject {
         events = snapshot.events
         motionState = snapshot.motion
         settings = snapshot.settings
+        reconcileSuggestions = Self.buildSuggestions(
+            records: snapshot.records,
+            motion: snapshot.motion
+        )
         isApplyingSnapshot = false
         motionAvailable = MotionSleepDetector.shared.isAvailable
         motionAuthorizationLabel = MotionSleepDetector.shared.authorizationLabel
         lastRefreshAt = Date()
     }
 
+    // MARK: - 对账
+
+    private static func buildSuggestions(
+        records: [SleepRecord],
+        motion: MotionState
+    ) -> [String: SleepReconcileSuggestion] {
+        var result: [String: SleepReconcileSuggestion] = [:]
+        for record in records {
+            guard let candidate = motion.decisions[record.nightKey]?.candidate,
+                  let suggestion = SleepReconciler.suggestion(for: record, candidate: candidate)
+            else { continue }
+            result[record.nightKey] = suggestion
+        }
+        return result
+    }
+
+    func suggestion(for record: SleepRecord) -> SleepReconcileSuggestion? {
+        reconcileSuggestions[record.nightKey]
+    }
+
+    func applySuggestion(_ suggestion: SleepReconcileSuggestion) {
+        SleepRepository.shared.applyReconcileSuggestion(
+            nightKey: suggestion.nightKey,
+            bed: suggestion.bed,
+            wake: suggestion.wake
+        )
+        refresh()
+    }
+
     // MARK: - 排程与推测
 
     func refreshSchedules() async {
-        let status = await ReminderScheduler.shared.authorizationStatus()
+        var status = await ReminderScheduler.shared.authorizationStatus()
+
+        // 早间/周/月小结默认开启，首次启动时请求通知权限
+        if status == .notDetermined,
+           settings.morningSummaryEnabled || settings.weeklySummaryEnabled || settings.monthlySummaryEnabled {
+            _ = await ReminderScheduler.shared.requestAuthorization()
+            status = await ReminderScheduler.shared.authorizationStatus()
+        }
+
         let reminderCount = await ReminderScheduler.shared.reschedule(settings: settings)
         let alarmResult = await WakeAlarmScheduler.shared.reschedule(settings: settings)
+        await MorningSummaryScheduler.shared.reschedule(settings: settings, records: records)
 
         notificationDenied = (status == .denied)
         scheduledReminderCount = reminderCount
@@ -149,12 +198,13 @@ final class SleepStore: ObservableObject {
         wakeAlarmDetail = alarmResult.detail
     }
 
-    func runMotionDetection(force: Bool) async {
+    func runMotionDetection(force: Bool, includeOpenLastNight: Bool = false) async {
         guard settings.motionInferenceEnabled else { return }
         _ = await MotionSleepDetector.shared.detectRecent(
             repository: SleepRepository.shared,
             settings: settings,
-            force: force
+            force: force,
+            includeOpenLastNight: includeOpenLastNight
         )
         refresh()
     }

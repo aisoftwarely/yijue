@@ -266,12 +266,14 @@ final class SleepRepository: @unchecked Sendable {
     }
 
     /// 把推测结果合进记录。返回是否写入了数据。
+    /// - Parameter allowCorrection: 允许用静止时段纠正睡眠专注记下的时间（窗口未结束的当晚不纠正）。
     @discardableResult
     func applyMotionCandidate(
         _ candidate: MotionCandidateSnapshot,
         forKey key: String,
         now: Date,
-        allowUpdate: Bool
+        allowUpdate: Bool,
+        allowCorrection: Bool = true
     ) -> Bool {
         lock.lock()
         defer { lock.unlock(); notifyChanged() }
@@ -289,26 +291,47 @@ final class SleepRepository: @unchecked Sendable {
                 record.bedTime = candidate.start
                 record.bedSource = .motion
                 changed = true
-            } else if record.bedSource == .motion, allowUpdate, let bed = record.bedTime {
+            } else if record.bedSource?.isFromMotion == true, allowUpdate, let bed = record.bedTime {
                 if abs(candidate.start.timeIntervalSince(bed)) >= 15 * 60 {
                     record.bedTime = candidate.start
                     changed = true
                 }
+            } else if allowCorrection,
+                      allowUpdate,
+                      candidate.confidence != .low,
+                      let bed = record.bedTime,
+                      candidate.start.timeIntervalSince(bed) >= SleepReconciler.threshold,
+                      candidate.start < (record.wakeTime ?? .distantFuture) {
+                // 开了睡眠模式又玩手机：记录时间偏早，以手机静止时刻为准
+                record.bedTime = candidate.start
+                record.bedSource = .reconciled
+                changed = true
             }
 
             if record.wakeTime == nil {
                 record.wakeTime = candidate.end
                 record.wakeSource = .motion
                 changed = true
-            } else if record.wakeSource == .motion, allowUpdate, let wake = record.wakeTime {
+            } else if record.wakeSource?.isFromMotion == true, allowUpdate, let wake = record.wakeTime {
                 if abs(candidate.end.timeIntervalSince(wake)) >= 15 * 60 {
                     record.wakeTime = candidate.end
                     changed = true
                 }
+            } else if allowCorrection,
+                      allowUpdate,
+                      candidate.confidence == .high,
+                      let wake = record.wakeTime,
+                      candidate.end.timeIntervalSince(wake) >= SleepReconciler.threshold,
+                      candidate.end.timeIntervalSince(wake) <= SleepReconciler.maxWakeExtension,
+                      candidate.end.timeIntervalSince(record.bedTime ?? candidate.start) <= SleepReconciler.maxDuration {
+                // 关了睡眠模式继续赖床：手机一直静止，起床时间顺延
+                record.wakeTime = candidate.end
+                record.wakeSource = .reconciled
+                changed = true
             }
 
             guard changed else { return false }
-            if record.bedSource == .motion && record.wakeSource == .motion {
+            if record.bedSource?.isFromMotion == true && record.wakeSource?.isFromMotion == true {
                 record.confidence = candidate.confidence
             }
             record.updatedAt = now
@@ -325,6 +348,38 @@ final class SleepRepository: @unchecked Sendable {
         record.confidence = candidate.confidence
         record.updatedAt = now
         state.records.append(record)
+        saveUnlocked(state)
+        return true
+    }
+
+    /// 用户点「按手机记录更正」：把建议的一端或两端改成静止推测的时间。
+    @discardableResult
+    func applyReconcileSuggestion(nightKey: String, bed: Date?, wake: Date?) -> Bool {
+        guard bed != nil || wake != nil else { return false }
+
+        lock.lock()
+        defer { lock.unlock(); notifyChanged() }
+
+        var state = loadUnlocked()
+        guard let index = state.records.firstIndex(where: { $0.nightKey == nightKey }) else { return false }
+        var record = state.records[index]
+        guard record.isEditableByAutomation else { return false }
+
+        if let bed {
+            record.bedTime = bed
+            record.bedSource = .reconciled
+        }
+        if let wake {
+            record.wakeTime = wake
+            record.wakeSource = .reconciled
+        }
+        if let bed = record.bedTime, let wake = record.wakeTime, wake <= bed {
+            return false
+        }
+
+        record.confidence = state.motion.decisions[nightKey]?.candidate?.confidence ?? record.confidence
+        record.updatedAt = Date()
+        state.records[index] = record
         saveUnlocked(state)
         return true
     }

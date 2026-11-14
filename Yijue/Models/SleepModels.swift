@@ -7,23 +7,31 @@ enum SleepEventKind: String, Codable {
 
 enum SleepSource: String, Codable {
     case motion
+    case reconciled
     case shortcut
     case manual
 
     var priority: Int {
         switch self {
         case .motion: return 0
-        case .shortcut: return 1
-        case .manual: return 2
+        case .reconciled: return 1
+        case .shortcut: return 2
+        case .manual: return 3
         }
     }
 
     var label: String {
         switch self {
         case .motion: return "静止推测"
+        case .reconciled: return "自动校正"
         case .shortcut: return "睡眠专注"
         case .manual: return "手动"
         }
+    }
+
+    /// 时间来自手机静止推测（含对账后的校正）。
+    var isFromMotion: Bool {
+        self == .motion || self == .reconciled
     }
 }
 
@@ -102,6 +110,9 @@ struct SleepRecord: Codable, Identifiable, Equatable {
     var originLabel: String {
         let sources = [bedSource, wakeSource].compactMap { $0 }
         guard let first = sources.first else { return "未知" }
+        if sources.contains(.reconciled) {
+            return sources.allSatisfy { $0.isFromMotion } ? "自动 · 静止校正" : "混合来源 · 已校正"
+        }
         if sources.allSatisfy({ $0 == first }) {
             return first == .motion ? "自动 · 静止推测" : first.label
         }
@@ -109,9 +120,26 @@ struct SleepRecord: Codable, Identifiable, Equatable {
     }
 
     var confidenceLabel: String? {
-        guard let confidence, bedSource == .motion || wakeSource == .motion else { return nil }
+        guard let confidence, (bedSource?.isFromMotion == true || wakeSource?.isFromMotion == true) else {
+            return nil
+        }
         return "置信度\(confidence.label)"
     }
+
+    var isReconciled: Bool {
+        bedSource == .reconciled || wakeSource == .reconciled
+    }
+}
+
+/// 睡眠专注时间和手机静止时段对不上时给出的一键修正建议。
+struct SleepReconcileSuggestion: Identifiable, Equatable {
+    var nightKey: String
+    var bed: Date?
+    var wake: Date?
+    var confidence: SleepConfidence
+
+    var id: String { nightKey }
+    var isEmpty: Bool { bed == nil && wake == nil }
 }
 
 struct MotionCandidateSnapshot: Codable, Equatable {

@@ -14,6 +14,7 @@ struct SettingsView: View {
             Form {
                 goalSection
                 reminderSection
+                summarySection
                 alarmSection
                 automationSection
                 motionSection
@@ -40,6 +41,15 @@ struct SettingsView: View {
                     _ = await ReminderScheduler.shared.requestAuthorization()
                     await store.refreshSchedules()
                 }
+            }
+            .onChange(of: store.settings.morningSummaryEnabled) { _, enabled in
+                requestNotificationIfNeeded(enabled)
+            }
+            .onChange(of: store.settings.weeklySummaryEnabled) { _, enabled in
+                requestNotificationIfNeeded(enabled)
+            }
+            .onChange(of: store.settings.monthlySummaryEnabled) { _, enabled in
+                requestNotificationIfNeeded(enabled)
             }
             .alert("清除所有记录？", isPresented: $showClearConfirm) {
                 Button("取消", role: .cancel) {}
@@ -90,6 +100,28 @@ struct SettingsView: View {
                 Text("通知权限未开启，提醒不会送达。请到「设置 > 通知 > 一觉」中允许。")
             } else if store.settings.bedtimeReminderEnabled {
                 Text("每天 \(reminderTimeText) 提醒一次。建议放在睡眠专注开始之前，避免被专注模式静音。")
+            }
+        }
+    }
+
+    // MARK: - 睡眠小结
+
+    private var summarySection: some View {
+        Section {
+            Toggle("早间小结", isOn: $store.settings.morningSummaryEnabled)
+            Toggle("每周总结", isOn: $store.settings.weeklySummaryEnabled)
+            Toggle("每月总结", isOn: $store.settings.monthlySummaryEnabled)
+
+            if store.notificationDenied {
+                Button("打开系统设置") { openSystemSettings() }
+            }
+        } header: {
+            Text("睡眠小结")
+        } footer: {
+            if store.notificationDenied {
+                Text("通知权限未开启，小结不会送达。请到「设置 > 通知 > 一觉」中允许。")
+            } else {
+                Text("起床 30 分钟后推送「昨晚睡了多久」；每周一附最近 7 晚平均时长和达标天数，每月 1 号附上月总结。需要通知权限。")
             }
         }
     }
@@ -177,7 +209,7 @@ struct SettingsView: View {
         } header: {
             Text("静止推测")
         } footer: {
-            Text("手机放在床边、夜里长时间没动，才会被推测为睡眠。Apple 只保留最近 7 天的运动历史；推测结果可以在首页确认或修正。")
+            Text("手机放在床边、夜里长时间没动，才会被推测为睡眠。推测结果会和睡眠专注时间对账：开专注后还玩手机、关专注后继续赖床，首页会提示按手机时间更正。Apple 只保留最近 7 天的运动历史。")
         }
     }
 
@@ -267,6 +299,14 @@ struct SettingsView: View {
                 store.settings[keyPath: keyPath] = (components.hour ?? 0) * 60 + (components.minute ?? 0)
             }
         )
+    }
+
+    private func requestNotificationIfNeeded(_ enabled: Bool) {
+        guard enabled else { return }
+        Task {
+            _ = await ReminderScheduler.shared.requestAuthorization()
+            await store.refreshSchedules()
+        }
     }
 
     private func openSystemSettings() {

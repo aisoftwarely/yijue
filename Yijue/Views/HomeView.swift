@@ -90,7 +90,7 @@ struct HomeView: View {
                                     .foregroundStyle(.green)
                             }
                             Spacer()
-                            if record.bedSource == .motion || record.wakeSource == .motion {
+                            if record.bedSource?.isFromMotion == true || record.wakeSource?.isFromMotion == true {
                                 if record.reviewed != true {
                                     Button("确认") {
                                         store.confirmMotion(nightKey: record.nightKey)
@@ -105,6 +105,10 @@ struct HomeView: View {
                             }
                             .font(.caption)
                             .buttonStyle(.bordered)
+                        }
+
+                        if let suggestion = store.suggestion(for: record) {
+                            reconcileBanner(suggestion)
                         }
                     } else {
                         draftContent(record)
@@ -184,6 +188,42 @@ struct HomeView: View {
                 .controlSize(.small)
             }
         }
+    }
+
+    // MARK: - 对账提示
+
+    private func reconcileBanner(_ suggestion: SleepReconcileSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("和手机静止时间对不上", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            if let bed = suggestion.bed {
+                Text("开着睡眠模式但还在玩手机：手机到 \(SleepCalendar.clockText(for: bed)) 才静止不动。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if let wake = suggestion.wake {
+                Text("睡眠模式关掉后还在睡：手机到 \(SleepCalendar.clockText(for: wake)) 才恢复活动。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                store.applySuggestion(suggestion)
+            } label: {
+                Label("按手机时间更正", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.footnote)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            Color.orange.opacity(0.10),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
     }
 
     // MARK: - 手动记录

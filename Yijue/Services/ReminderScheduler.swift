@@ -5,7 +5,7 @@ final class ReminderScheduler {
     static let shared = ReminderScheduler()
 
     private let center = UNUserNotificationCenter.current()
-    private let prefix = "sleep."
+    private let prefix = "sleep.bedtime"
     private let bedtimeIdentifier = "sleep.bedtime"
 
     private let messages = [
@@ -22,7 +22,7 @@ final class ReminderScheduler {
         (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
-    /// 只清理本 App 的 `sleep.` 前缀通知，保留其他来源。
+    /// 只清理睡前提醒自己的通知，不动起床闹钟和小结。
     func reschedule(settings: SleepSettings) async -> Int {
         let pending = await center.pendingNotificationRequests()
         let identifiers = pending.map(\.identifier).filter { $0.hasPrefix(prefix) }
