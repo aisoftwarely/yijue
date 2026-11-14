@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var testResult = ""
     @State private var isDetecting = false
     @State private var isTesting = false
+    @State private var notificationTestResult = ""
 
     var body: some View {
         NavigationStack {
@@ -111,6 +112,23 @@ struct SettingsView: View {
             Toggle("早间小结", isOn: $store.settings.morningSummaryEnabled)
             Toggle("每周总结", isOn: $store.settings.weeklySummaryEnabled)
             Toggle("每月总结", isOn: $store.settings.monthlySummaryEnabled)
+
+            LabeledContent("通知权限", value: store.notificationAuthorizationLabel)
+            LabeledContent("睡前提醒排程", value: "\(store.scheduledReminderCount) 条")
+
+            Button {
+                Task {
+                    notificationTestResult = await ReminderScheduler.shared.scheduleTest()
+                }
+            } label: {
+                Text("1 分钟后发一条测试通知")
+            }
+
+            if !notificationTestResult.isEmpty {
+                Text(notificationTestResult)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             if store.notificationDenied {
                 Button("打开系统设置") { openSystemSettings() }

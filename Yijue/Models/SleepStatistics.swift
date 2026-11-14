@@ -116,6 +116,28 @@ enum SleepStatistics {
         return minutes.reduce(0, +) / minutes.count
     }
 
+    /// 入睡时间的标准差（分钟）。数值越小，作息越规律。
+    static func bedtimeSpreadMinutes(_ records: [SleepRecord]) -> Double? {
+        let minutes = completedRecords(records).compactMap { record -> Double? in
+            guard let bed = record.bedTime else { return nil }
+            return Double(SleepCalendar.signedMinutes(bed))
+        }
+        guard minutes.count >= 2 else { return nil }
+
+        let mean = minutes.reduce(0, +) / Double(minutes.count)
+        let variance = minutes.reduce(0) { $0 + pow($1 - mean, 2) } / Double(minutes.count)
+        return sqrt(variance)
+    }
+
+    /// 本期累计睡眠债：每晚不足目标的部分相加。
+    static func sleepDebt(_ records: [SleepRecord], goalMinutes: Int) -> TimeInterval {
+        let goal = TimeInterval(goalMinutes * 60)
+        return completedRecords(records).reduce(0) { total, record in
+            guard let duration = record.duration else { return total }
+            return total + max(0, goal - duration)
+        }
+    }
+
     static func metGoalCount(_ records: [SleepRecord], goalMinutes: Int) -> Int {
         completedRecords(records).filter { record in
             guard let duration = record.duration else { return false }

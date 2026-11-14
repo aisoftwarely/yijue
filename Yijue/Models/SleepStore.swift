@@ -20,6 +20,7 @@ final class SleepStore: ObservableObject {
     }
 
     @Published private(set) var notificationDenied = false
+    @Published private(set) var notificationAuthorizationLabel = "未询问"
     @Published private(set) var scheduledReminderCount = 0
     @Published private(set) var wakeAlarmMode: WakeAlarmMode = .off
     @Published private(set) var wakeAlarmDetail = ""
@@ -87,6 +88,26 @@ final class SleepStore: ObservableObject {
         return duration >= goalInterval
     }
 
+    /// 和最近 7 晚（不含这一晚）平均时长的对比文案。
+    func recentComparisonText(for record: SleepRecord) -> String? {
+        guard let duration = record.duration else { return nil }
+        let others = records
+            .filter { $0.nightKey != record.nightKey && $0.isComplete }
+            .sorted { $0.nightKey > $1.nightKey }
+            .prefix(7)
+        let durations = others.compactMap(\.duration)
+        guard durations.count >= 2 else { return nil }
+
+        let average = durations.reduce(0, +) / Double(durations.count)
+        let delta = duration - average
+        if abs(delta) < 5 * 60 {
+            return "和近 7 晚平均差不多"
+        }
+        return delta > 0
+            ? "比近 7 晚平均多睡 \(SleepCalendar.durationText(delta))"
+            : "比近 7 晚平均少睡 \(SleepCalendar.durationText(-delta))"
+    }
+
     // MARK: - 写入
 
     @discardableResult
@@ -104,6 +125,14 @@ final class SleepStore: ObservableObject {
     @discardableResult
     func saveManual(bed: Date, wake: Date, nightKey: String? = nil) -> SleepRecord? {
         let record = SleepRepository.shared.saveManual(bed: bed, wake: wake, nightKey: nightKey)
+        refresh()
+        return record
+    }
+
+    /// 只补草稿缺少的一端，已有的一端保持原样。
+    @discardableResult
+    func saveManualSingleEnd(nightKey: String, bed: Date?, wake: Date?) -> SleepRecord? {
+        let record = SleepRepository.shared.saveManualSingleEnd(nightKey: nightKey, bed: bed, wake: wake)
         refresh()
         return record
     }
@@ -193,6 +222,7 @@ final class SleepStore: ObservableObject {
         await MorningSummaryScheduler.shared.reschedule(settings: settings, records: records)
 
         notificationDenied = (status == .denied)
+        notificationAuthorizationLabel = Self.authorizationLabel(status)
         scheduledReminderCount = reminderCount
         wakeAlarmMode = alarmResult.mode
         wakeAlarmDetail = alarmResult.detail
@@ -207,5 +237,16 @@ final class SleepStore: ObservableObject {
             includeOpenLastNight: includeOpenLastNight
         )
         refresh()
+    }
+
+    private static func authorizationLabel(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "已允许"
+        case .denied: return "已拒绝"
+        case .notDetermined: return "未询问"
+        case .provisional: return "临时允许"
+        case .ephemeral: return "临时允许"
+        @unknown default: return "未知"
+        }
     }
 }

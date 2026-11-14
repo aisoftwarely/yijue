@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showEditor = false
     @State private var editorRecord: SleepRecord?
     @State private var showSetup = false
+    @State private var hapticTick = 0
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,7 @@ struct HomeView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("睡个好觉")
+            .sensoryFeedback(.success, trigger: hapticTick)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -78,6 +80,12 @@ struct HomeView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                        if let comparison = store.recentComparisonText(for: record) {
+                            Text(comparison)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
                         HStack(spacing: 10) {
                             if let confidence = record.confidenceLabel {
                                 Text(confidence)
@@ -94,6 +102,7 @@ struct HomeView: View {
                                 if record.reviewed != true {
                                     Button("确认") {
                                         store.confirmMotion(nightKey: record.nightKey)
+                                        hapticTick += 1
                                     }
                                     .font(.caption)
                                     .buttonStyle(.bordered)
@@ -152,6 +161,7 @@ struct HomeView: View {
                 HStack(spacing: 10) {
                     Button {
                         _ = store.recordEvent(kind: .wake, source: .manual)
+                        hapticTick += 1
                     } label: {
                         Label("我现在醒了", systemImage: "sunrise.fill")
                     }
@@ -211,6 +221,7 @@ struct HomeView: View {
 
             Button {
                 store.applySuggestion(suggestion)
+                hapticTick += 1
             } label: {
                 Label("按手机时间更正", systemImage: "arrow.triangle.2.circlepath")
                     .font(.footnote)
@@ -232,6 +243,7 @@ struct HomeView: View {
         HStack(spacing: 12) {
             Button {
                 _ = store.recordEvent(kind: .bedtime, source: .manual)
+                hapticTick += 1
             } label: {
                 Label("记录入睡", systemImage: "moon.fill")
                     .frame(maxWidth: .infinity)
@@ -241,6 +253,7 @@ struct HomeView: View {
 
             Button {
                 _ = store.recordEvent(kind: .wake, source: .manual)
+                hapticTick += 1
             } label: {
                 Label("记录起床", systemImage: "sunrise.fill")
                     .frame(maxWidth: .infinity)

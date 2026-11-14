@@ -3,6 +3,7 @@ import SwiftUI
 
 struct StatsView: View {
     @EnvironmentObject private var store: SleepStore
+    @Environment(\.colorScheme) private var colorScheme
     @State private var period: StatsPeriod = .week
     /// 正在查看的时间段：周视图按 7 天、月视图按自然月。
     @State private var anchor: Date = Date()
@@ -155,6 +156,11 @@ struct StatsView: View {
         "\(SleepStatistics.streak(records: store.records, goalMinutes: store.settings.goalMinutes)) 晚"
     }
 
+    private var spreadText: String {
+        guard let spread = SleepStatistics.bedtimeSpreadMinutes(periodRecords) else { return "—" }
+        return "±\(Int(spread.rounded())) 分"
+    }
+
     private var maxDurationHours: Double {
         completeRecords.compactMap(\.duration).map { $0 / 3600 }.max() ?? 8
     }
@@ -188,6 +194,7 @@ struct StatsView: View {
             statTile(title: "平均起床", value: averageWakeText)
             statTile(title: "达标天数", value: metGoalText)
             statTile(title: "连续达标", value: streakText)
+            statTile(title: "入睡波动", value: spreadText)
         }
     }
 
@@ -232,6 +239,13 @@ struct StatsView: View {
         let met = SleepStatistics.metGoalCount(periodRecords, goalMinutes: store.settings.goalMinutes)
         if !completeRecords.isEmpty {
             parts.append("达标 \(met)/\(completeRecords.count) 晚")
+        }
+
+        let debt = SleepStatistics.sleepDebt(periodRecords, goalMinutes: store.settings.goalMinutes)
+        if debt < 60 {
+            parts.append("没有睡眠债")
+        } else {
+            parts.append("本期睡眠债 \(SleepCalendar.durationText(debt))")
         }
 
         return parts.joined(separator: "，") + "。"
@@ -327,12 +341,11 @@ struct StatsView: View {
     }
 
     private func heatColor(level: Int) -> Color {
-        switch level {
-        case 0: return Color.accentColor.opacity(0.18)
-        case 1: return Color.accentColor.opacity(0.4)
-        case 2: return Color.accentColor.opacity(0.65)
-        default: return Color.accentColor
-        }
+        let steps: [Double] = colorScheme == .dark
+            ? [0.32, 0.55, 0.78, 1.0]
+            : [0.15, 0.38, 0.65, 1.0]
+        let index = min(max(level, 0), steps.count - 1)
+        return Color.accentColor.opacity(steps[index])
     }
 
     private func heatCell(_ point: NightPoint) -> some View {

@@ -51,6 +51,27 @@ final class ReminderScheduler {
         return 1
     }
 
+    /// 1 分钟后的测试通知，用来确认权限和排程都正常。
+    func scheduleTest() async -> String {
+        let content = UNMutableNotificationContent()
+        content.title = "测试通知"
+        content.body = "能看到这条，说明通知权限和排程都正常。"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 60, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "\(prefix).test",
+            content: content,
+            trigger: trigger
+        )
+        do {
+            try await center.add(request)
+            return "已排一条 1 分钟后的测试通知，锁屏等一下。"
+        } catch {
+            return "测试通知排程失败：\(error.localizedDescription)"
+        }
+    }
+
     func nextBedtimeDate(settings: SleepSettings, now: Date = Date()) -> Date? {
         guard settings.bedtimeReminderEnabled else { return nil }
         var components = DateComponents()
