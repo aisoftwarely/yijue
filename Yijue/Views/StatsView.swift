@@ -391,6 +391,13 @@ struct StatsView: View {
                                     : Color.accentColor.opacity(0.35)
                             )
                             .cornerRadius(3)
+                            .annotation(position: .top, spacing: 2) {
+                                if period == .week {
+                                    Text(SleepCalendar.shortDurationText(duration))
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
 
