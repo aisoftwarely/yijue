@@ -13,7 +13,8 @@ struct SleepSettings: Codable, Equatable {
     var nightWindowEndMinutes: Int = 12 * 60
     var useNotificationFallback: Bool = true
     var setupAcknowledged: Bool = false
-    var morningSummaryEnabled: Bool = true       // 起床后 30 分钟
+    var morningSummaryEnabled: Bool = true       // 每天固定时间推送
+    var morningSummaryMinutes: Int = 9 * 60 + 30 // 09:30
     var weeklySummaryEnabled: Bool = true        // 周一早上
     var monthlySummaryEnabled: Bool = true       // 每月 1 号早上
 
@@ -26,7 +27,8 @@ struct SleepSettings: Codable, Equatable {
         case motionInferenceEnabled
         case nightWindowStartMinutes, nightWindowEndMinutes
         case useNotificationFallback, setupAcknowledged
-        case morningSummaryEnabled, weeklySummaryEnabled, monthlySummaryEnabled
+        case morningSummaryEnabled, morningSummaryMinutes
+        case weeklySummaryEnabled, monthlySummaryEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -44,6 +46,7 @@ struct SleepSettings: Codable, Equatable {
         useNotificationFallback = (try? c.decode(Bool.self, forKey: .useNotificationFallback)) ?? true
         setupAcknowledged = (try? c.decode(Bool.self, forKey: .setupAcknowledged)) ?? false
         morningSummaryEnabled = (try? c.decode(Bool.self, forKey: .morningSummaryEnabled)) ?? true
+        morningSummaryMinutes = (try? c.decode(Int.self, forKey: .morningSummaryMinutes)) ?? 9 * 60 + 30
         weeklySummaryEnabled = (try? c.decode(Bool.self, forKey: .weeklySummaryEnabled)) ?? true
         monthlySummaryEnabled = (try? c.decode(Bool.self, forKey: .monthlySummaryEnabled)) ?? true
     }

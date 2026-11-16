@@ -113,6 +113,16 @@ struct SettingsView: View {
             Toggle("每周总结", isOn: $store.settings.weeklySummaryEnabled)
             Toggle("每月总结", isOn: $store.settings.monthlySummaryEnabled)
 
+            if store.settings.morningSummaryEnabled
+                || store.settings.weeklySummaryEnabled
+                || store.settings.monthlySummaryEnabled {
+                DatePicker(
+                    "小结时间",
+                    selection: timeBinding(\.morningSummaryMinutes),
+                    displayedComponents: .hourAndMinute
+                )
+            }
+
             LabeledContent("通知权限", value: store.notificationAuthorizationLabel)
             LabeledContent("睡前提醒排程", value: "\(store.scheduledReminderCount) 条")
 
@@ -139,7 +149,7 @@ struct SettingsView: View {
             if store.notificationDenied {
                 Text("通知权限未开启，小结不会送达。请到「设置 > 通知 > 睡个好觉」中允许。")
             } else {
-                Text("起床 30 分钟后推送「昨晚睡了多久」；每周一附最近 7 晚平均时长和达标天数，每月 1 号附上月总结。需要通知权限。")
+                Text("每天 \(SleepCalendar.clockText(minutes: store.settings.morningSummaryMinutes)) 推送昨晚睡了多久；如果那时还在睡，就等起床 5 分钟后。每周一附最近 7 晚平均，每月 1 号附上月总结。需要通知权限。")
             }
         }
     }
